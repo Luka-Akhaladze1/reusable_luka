@@ -12,6 +12,9 @@ on:
       brand-name:
         required: true
         type: string
+      region:
+        required: true
+        type: string  
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -64,7 +67,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-central-1
+          aws-region: ${{ inputs.region }}
           
       - name: Login to Amazon ECR
         id: login-ecr
@@ -81,4 +84,4 @@ jobs:
 
       - name: Force new deployment in ECS
         run: |
-          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment --region ${{ inputs.region }}
