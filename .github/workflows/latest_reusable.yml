@@ -12,9 +12,6 @@ on:
       cluster_name:
         required: true
         type: string
-      region:
-        required: true
-        type: string
       use_build_args:
         required: false
         type: boolean
@@ -23,6 +20,12 @@ on:
         required: false
         type: boolean
         default: false
+      region:
+        required: true
+        type: string
+      dr-region:
+        required: true
+        type: string
     secrets:
       aws_access_key_id:
         required: true
@@ -65,3 +68,37 @@ jobs:
           CLUSTER_NAME="${{ inputs.branch_name }}-${{ inputs.cluster_name }}-cluster"
           SERVICE_NAME="${{ inputs.branch_name }}-${{ inputs.cluster_name }}-${{ inputs.repo_name }}"
           aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment --region ${{ inputs.region }}
+
+  deploy-dr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-region: ${{ inputs.dr-region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Docker image
+        run: |
+          SERVICE_NAME="${{ inputs.branch_name }}-${{ inputs.cluster_name }}-${{ inputs.repo_name }}"
+          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${SERVICE_NAME}:latest"
+          if [ "${{ inputs.use_build_args }}" = "true" ] && [ -n "${{ secrets.dynamic_build_args }}" ]; then
+            docker build ${{ secrets.dynamic_build_args }} -t $IMAGE_URI .
+          else
+            docker build -t $IMAGE_URI .
+          fi
+          docker push $IMAGE_URI
+
+      - name: Update ECS Service
+        run: |
+          CLUSTER_NAME="${{ inputs.branch_name }}-${{ inputs.cluster_name }}-cluster"
+          SERVICE_NAME="${{ inputs.branch_name }}-${{ inputs.cluster_name }}-${{ inputs.repo_name }}"
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment --region ${{ inputs.dr-region }}
